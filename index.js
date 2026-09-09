@@ -1,14 +1,18 @@
-const { Client, GatewayIntentBits, REST, Routes, WebhookClient, PermissionFlagsBits, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, WebhookClient, PermissionFlagsBits, ChannelType, Partials } = require('discord.js');
 const http = require('http');
 
+// Corrected intents and partials to fully unlock DM reading capabilities
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds, 
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.DirectMessages, // Required to read DMs
-        GatewayIntentBits.MessageContent // Required to read message text
+        GatewayIntentBits.DirectMessages, 
+        GatewayIntentBits.MessageContent 
     ],
-    partials: ['Channel'] // Required to detect DMs correctly in v14
+    partials: [
+        Partials.Channel, 
+        Partials.Message
+    ]
 });
 
 // Define slash commands
@@ -29,13 +33,13 @@ const commands = [
             {
                 name: 'user',
                 description: 'The user you want to send a DM to',
-                type: 6, // USER selector
+                type: 6, 
                 required: true,
             },
             {
                 name: 'message',
                 description: 'The custom text you want to send',
-                type: 3, // STRING input
+                type: 3, 
                 required: true,
             }
         ]
@@ -68,12 +72,12 @@ client.on('guildMemberAdd', async member => {
     }
 });
 
-// spy function: Listen for incoming DM messages
+// Spy function: Listen for incoming DM messages and forward them
 client.on('messageCreate', async message => {
-    // Ignore messages from bots (including itself)
+    // Ignore messages from bots
     if (message.author.bot) return;
 
-    // Check if the message is a Direct Message (DM)
+    // Check if message is inside a DM channel
     if (message.channel.type === ChannelType.DM) {
         const adminChannelId = '1547054751542419528';
         
@@ -93,12 +97,10 @@ client.on('messageCreate', async message => {
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
-    // PING COMMAND
     if (interaction.commandName === 'ping') {
         await interaction.reply('Pong! 🏓');
     }
 
-    // SENDWEBHOOK COMMAND
     if (interaction.commandName === 'sendwebhook') {
         const webhookUrl = process.env.WEBHOOK_URL;
         if (!webhookUrl) {
@@ -118,7 +120,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // SENDCUSTOM COMMAND (Admin only + Fixed ID check)
     if (interaction.commandName === 'sendcustom') {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return await interaction.reply({ content: 'You do not have permission to use this command!', ephemeral: true });
