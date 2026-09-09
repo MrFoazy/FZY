@@ -51,7 +51,7 @@ const commands = [
             {
                 name: 'status',
                 description: 'Choose the new status',
-                type: 3, // STRING input
+                type: 3, 
                 required: true,
                 choices: [
                     { name: 'Online', value: 'online' },
@@ -70,27 +70,43 @@ const commands = [
             {
                 name: 'text',
                 description: 'The new custom status text',
-                type: 3, // STRING input
+                type: 3, 
+                required: true,
+            }
+        ]
+    },
+    {
+        name: 'listening',
+        description: 'Admin only: Set the bot activity to "Listening to..."',
+        default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+        options: [
+            {
+                name: 'song',
+                description: 'The name of the song',
+                type: 3, // STRING
+                required: true,
+            },
+            {
+                name: 'artist',
+                description: 'The name of the artist',
+                type: 3, // STRING
                 required: true,
             }
         ]
     }
 ];
 
-// Variable to keep track of current text status across status updates
-let currentCustomStatus = 'Official Bot of MrFoazy';
+let currentActivity = {
+    name: 'Official Bot of MrFoazy',
+    type: ActivityType.Custom
+};
 
 // Register commands and set status on startup
 client.once('ready', async () => {
     console.log(`Bot is online as ${client.user.tag}!`);
 
-    // Initial status setup
     client.user.setPresence({
-        activities: [{ 
-            name: 'customstatus', 
-            type: ActivityType.Custom, 
-            state: currentCustomStatus 
-        }],
+        activities: [currentActivity],
         status: 'dnd', 
     });
 
@@ -111,13 +127,12 @@ client.once('ready', async () => {
 client.on('guildMemberAdd', async member => {
     try {
         await member.send(`Welcome to **${member.guild.name}**, ${member.user.username}! 🎉 We hope you have a great time here!`);
-        console.log(`Successfully sent a welcome DM to ${member.user.tag}`);
     } catch (error) {
         console.error(`Could not send welcome DM to ${member.user.tag}.`, error);
     }
 });
 
-// Spy function: Listen for incoming DM messages and forward text, links, and images
+// Spy function: Listen for incoming DM messages
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
@@ -128,26 +143,17 @@ client.on('messageCreate', async message => {
             const adminChannel = await client.channels.fetch(adminChannelId);
             if (adminChannel) {
                 let logMessage = `👁️ **DM Spy:** User **${message.author.tag}** (${message.author.id}) sent a message:\n`;
-                
-                if (message.content) {
-                    logMessage += `> "${message.content}"\n`;
-                }
-
+                if (message.content) logMessage += `> "${message.content}"\n`;
                 if (message.attachments.size > 0) {
                     logMessage += `📁 **Attachments:**\n`;
-                    message.attachments.forEach(attachment => {
-                        logMessage += `${attachment.url}\n`;
-                    });
+                    message.attachments.forEach(attachment => { logMessage += `${attachment.url}\n`; });
                 }
-
                 if (message.mentions.users.size > 0) {
                     logMessage += `👤 **Mentioned Users:** `;
                     const mentions = message.mentions.users.map(u => `**${u.tag}**`).join(', ');
                     logMessage += `${mentions}\n`;
                 }
-
                 await adminChannel.send({ content: logMessage });
-                console.log(`Forwarded comprehensive DM from ${message.author.tag} to admin channel.`);
             }
         } catch (error) {
             console.error('Failed to forward DM to admin channel:', error);
@@ -159,8 +165,7 @@ client.on('messageCreate', async message => {
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
-    // Admin & Channel restriction check for admin commands
-    const adminCommands = ['sendcustom', 'changestatus', 'changemind'];
+    const adminCommands = ['sendcustom', 'changestatus', 'changemind', 'listening'];
     if (adminCommands.includes(interaction.commandName)) {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return await interaction.reply({ content: 'You do not have permission to use this command!', ephemeral: true });
@@ -172,22 +177,15 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // PING COMMAND
     if (interaction.commandName === 'ping') {
         await interaction.reply('Pong! 🏓');
     }
 
-    // CHANGESTATUS COMMAND
     if (interaction.commandName === 'changestatus') {
         const newStatus = interaction.options.getString('status');
-        
         try {
             client.user.setPresence({
-                activities: [{ 
-                    name: 'customstatus', 
-                    type: ActivityType.Custom, 
-                    state: currentCustomStatus 
-                }],
+                activities: [currentActivity],
                 status: newStatus
             });
             await interaction.reply({ content: `Successfully changed status indicator to **${newStatus}**!`, ephemeral: true });
@@ -197,18 +195,12 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // CHANGEMIND COMMAND
     if (interaction.commandName === 'changemind') {
         const newText = interaction.options.getString('text');
-        currentCustomStatus = newText; // Update global state
-        
+        currentActivity = { name: 'customstatus', type: ActivityType.Custom, state: newText };
         try {
             client.user.setPresence({
-                activities: [{ 
-                    name: 'customstatus', 
-                    type: ActivityType.Custom, 
-                    state: currentCustomStatus 
-                }],
+                activities: [currentActivity],
                 status: client.user.presence.status || 'dnd'
             });
             await interaction.reply({ content: `Successfully changed status text to: "${newText}"`, ephemeral: true });
@@ -218,11 +210,32 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // SENDCUSTOM COMMAND
+    // NEW LISTENING COMMAND
+    if (interaction.commandName === 'listening') {
+        const song = interaction.options.getString('song');
+        const artist = interaction.options.getString('artist');
+        
+        // Change type to Listening (2) and combine song + artist
+        currentActivity = { 
+            name: `${song} by ${artist}`, 
+            type: ActivityType.Listening 
+        };
+
+        try {
+            client.user.setPresence({
+                activities: [currentActivity],
+                status: client.user.presence.status || 'dnd'
+            });
+            await interaction.reply({ content: `The bot is now fake-listening to: **${song}** by **${artist}** 🎵`, ephemeral: true });
+        } catch (error) {
+            console.error(error);
+            await interaction.reply({ content: 'Failed to update the listening status.', ephemeral: true });
+        }
+    }
+
     if (interaction.commandName === 'sendcustom') {
         const targetUser = interaction.options.getUser('user');
         const customMessage = interaction.options.getString('message');
-
         try {
             await interaction.reply({ content: `Sending your message to **${targetUser.username}**...`, ephemeral: true });
             await targetUser.send(`You received a custom message from an Admin in **${interaction.guild.name}**:\n\n"${customMessage}"`);
@@ -234,7 +247,6 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// Required web server for Render to stay online
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Bot is running\n');
