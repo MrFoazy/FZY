@@ -1,9 +1,14 @@
-const { Client, GatewayIntentBits, REST, Routes, WebhookClient } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, WebhookClient, PermissionFlagsBits } = require('discord.js');
 const http = require('http');
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+const client = new Client({ 
+    intents: [
+        GatewayIntentBits.Guilds, 
+        GatewayIntentBits.GuildMembers
+    ] 
+});
 
-// 1. Define slash commands
+// Define slash commands
 const commands = [
     {
         name: 'ping',
@@ -11,11 +16,30 @@ const commands = [
     },
     {
         name: 'sendwebhook',
-        description: 'Sends a test message via webhook',
+        description: 'Sends a test message via webhook and DMs you',
+    },
+    {
+        name: 'sendcustom',
+        description: 'Admin only: Send a custom DM to any user (Must be used in designated admin channel)',
+        default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+        options: [
+            {
+                name: 'user',
+                description: 'The user you want to send a DM to',
+                type: 6, // USER selector
+                required: true,
+            },
+            {
+                name: 'message',
+                description: 'The custom text you want to send',
+                type: 3, // STRING input
+                required: true,
+            }
+        ]
     }
 ];
 
-// Register commands with Discord on startup
+// Register commands on startup
 client.once('ready', async () => {
     console.log(`Bot is online as ${client.user.tag}!`);
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -31,22 +55,31 @@ client.once('ready', async () => {
     }
 });
 
-// 2. Listen for command interactions
+// Welcome DM when someone joins the server
+client.on('guildMemberAdd', async member => {
+    try {
+        await member.send(`Welcome to **${member.guild.name}**, ${member.user.username}! 🎉 We hope you have a great time here!`);
+        console.log(`Successfully sent a welcome DM to ${member.user.tag}`);
+    } catch (error) {
+        console.error(`Could not send welcome DM to ${member.user.tag}.`, error);
+    }
+});
+
+// Listen for command interactions
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
+    // PING COMMAND
     if (interaction.commandName === 'ping') {
         await interaction.reply('Pong! 🏓');
     }
 
+    // SENDWEBHOOK COMMAND
     if (interaction.commandName === 'sendwebhook') {
-        // We read the webhook URL safely from Render's Environment Variables
         const webhookUrl = process.env.WEBHOOK_URL;
-
         if (!webhookUrl) {
             return await interaction.reply({ content: 'Error: WEBHOOK_URL is not configured on Render!', ephemeral: true });
         }
-
         try {
             const webhookClient = new WebhookClient({ url: webhookUrl });
             await webhookClient.send({
@@ -54,10 +87,39 @@ client.on('interactionCreate', async interaction => {
                 username: 'FZY Webhook',
                 avatarURL: client.user.displayAvatarURL(),
             });
-            await interaction.reply({ content: 'Webhook message sent successfully!', ephemeral: true });
+            await interaction.reply({ content: 'Webhook message sent and DM dispatched!', ephemeral: true });
         } catch (error) {
             console.error(error);
-            await interaction.reply({ content: 'Failed to send webhook message.', ephemeral: true });
+            await interaction.reply({ content: 'Failed to execute command.', ephemeral: true });
+        }
+    }
+
+    // SENDCUSTOM COMMAND (Admin only + Fixed ID check)
+    if (interaction.commandName === 'sendcustom') {
+        // 1. Security check: Is the user an administrator?
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return await interaction.reply({ content: 'You do not have permission to use this command!', ephemeral: true });
+        }
+
+        // 2. Channel ID check using your specific ID
+        const allowedChannelId = '1547054751542419528';
+        if (interaction.channel.id !== allowedChannelId) {
+            return await interaction.reply({ content: `This command can only be executed inside the designated admin channel (<#${allowedChannelId}>)!`, ephemeral: true });
+        }
+
+        const targetUser = interaction.options.getUser('user');
+        const customMessage = interaction.options.getString('message');
+
+        try {
+            await interaction.reply({ content: `Sending your message to **${targetUser.username}**...`, ephemeral: true });
+
+            // Send the DM to the chosen user
+            await targetUser.send(`You received a custom message from an Admin in **${interaction.guild.name}**:\n\n"${customMessage}"`);
+            
+            await interaction.editReply({ content: `Successfully sent the DM to **${targetUser.username}**! 📫` });
+        } catch (error) {
+            console.error(error);
+            await interaction.editReply({ content: `Failed to send DM to **${targetUser.username}**. Their DMs might be closed!` });
         }
     }
 });
