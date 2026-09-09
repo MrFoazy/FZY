@@ -42,21 +42,56 @@ const commands = [
                 required: true,
             }
         ]
+    },
+    {
+        name: 'changestatus',
+        description: 'Admin only: Change the online status of the bot',
+        default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+        options: [
+            {
+                name: 'status',
+                description: 'Choose the new status',
+                type: 3, // STRING input
+                required: true,
+                choices: [
+                    { name: 'Online', value: 'online' },
+                    { name: 'Idle', value: 'idle' },
+                    { name: 'Do Not Disturb', value: 'dnd' },
+                    { name: 'Offline / Invisible', value: 'invisible' }
+                ]
+            }
+        ]
+    },
+    {
+        name: 'changemind',
+        description: 'Admin only: Change the custom status text of the bot',
+        default_member_permissions: PermissionFlagsBits.Administrator.toString(),
+        options: [
+            {
+                name: 'text',
+                description: 'The new custom status text',
+                type: 3, // STRING input
+                required: true,
+            }
+        ]
     }
 ];
+
+// Variable to keep track of current text status across status updates
+let currentCustomStatus = 'Official Bot of MrFoazy';
 
 // Register commands and set status on startup
 client.once('ready', async () => {
     console.log(`Bot is online as ${client.user.tag}!`);
 
-    // 1. Set Status to Do Not Disturb and Custom Activity Text
+    // Initial status setup
     client.user.setPresence({
         activities: [{ 
             name: 'customstatus', 
             type: ActivityType.Custom, 
-            state: 'Official Bot of MrFoazy' 
+            state: currentCustomStatus 
         }],
-        status: 'dnd', // 'dnd' stands for Do Not Disturb (Red circle)
+        status: 'dnd', 
     });
 
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -124,30 +159,9 @@ client.on('messageCreate', async message => {
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
-    if (interaction.commandName === 'ping') {
-        await interaction.reply('Pong! 🏓');
-    }
-
-    if (interaction.commandName === 'sendwebhook') {
-        const webhookUrl = process.env.WEBHOOK_URL;
-        if (!webhookUrl) {
-            return await interaction.reply({ content: 'Error: WEBHOOK_URL is not configured on Render!', ephemeral: true });
-        }
-        try {
-            const webhookClient = new WebhookClient({ url: webhookUrl });
-            await webhookClient.send({
-                content: 'Hello! This message is sent via a Discord Webhook! 🚀',
-                username: 'FZY Webhook',
-                avatarURL: client.user.displayAvatarURL(),
-            });
-            await interaction.reply({ content: 'Webhook message sent and DM dispatched!', ephemeral: true });
-        } catch (error) {
-            console.error(error);
-            await interaction.reply({ content: 'Failed to execute command.', ephemeral: true });
-        }
-    }
-
-    if (interaction.commandName === 'sendcustom') {
+    // Admin & Channel restriction check for admin commands
+    const adminCommands = ['sendcustom', 'changestatus', 'changemind'];
+    if (adminCommands.includes(interaction.commandName)) {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return await interaction.reply({ content: 'You do not have permission to use this command!', ephemeral: true });
         }
@@ -156,7 +170,56 @@ client.on('interactionCreate', async interaction => {
         if (interaction.channel.id !== allowedChannelId) {
             return await interaction.reply({ content: `This command can only be executed inside the designated admin channel (<#${allowedChannelId}>)!`, ephemeral: true });
         }
+    }
 
+    // PING COMMAND
+    if (interaction.commandName === 'ping') {
+        await interaction.reply('Pong! 🏓');
+    }
+
+    // CHANGESTATUS COMMAND
+    if (interaction.commandName === 'changestatus') {
+        const newStatus = interaction.options.getString('status');
+        
+        try {
+            client.user.setPresence({
+                activities: [{ 
+                    name: 'customstatus', 
+                    type: ActivityType.Custom, 
+                    state: currentCustomStatus 
+                }],
+                status: newStatus
+            });
+            await interaction.reply({ content: `Successfully changed status indicator to **${newStatus}**!`, ephemeral: true });
+        } catch (error) {
+            console.error(error);
+            await interaction.reply({ content: 'Failed to update status indicator.', ephemeral: true });
+        }
+    }
+
+    // CHANGEMIND COMMAND
+    if (interaction.commandName === 'changemind') {
+        const newText = interaction.options.getString('text');
+        currentCustomStatus = newText; // Update global state
+        
+        try {
+            client.user.setPresence({
+                activities: [{ 
+                    name: 'customstatus', 
+                    type: ActivityType.Custom, 
+                    state: currentCustomStatus 
+                }],
+                status: client.user.presence.status || 'dnd'
+            });
+            await interaction.reply({ content: `Successfully changed status text to: "${newText}"`, ephemeral: true });
+        } catch (error) {
+            console.error(error);
+            await interaction.reply({ content: 'Failed to update status text.', ephemeral: true });
+        }
+    }
+
+    // SENDCUSTOM COMMAND
+    if (interaction.commandName === 'sendcustom') {
         const targetUser = interaction.options.getUser('user');
         const customMessage = interaction.options.getString('message');
 
