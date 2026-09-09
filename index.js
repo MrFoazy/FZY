@@ -1,11 +1,14 @@
-const { Client, GatewayIntentBits, REST, Routes, WebhookClient, PermissionFlagsBits } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, WebhookClient, PermissionFlagsBits, ChannelType } = require('discord.js');
 const http = require('http');
 
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildMembers
-    ] 
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.DirectMessages, // Required to read DMs
+        GatewayIntentBits.MessageContent // Required to read message text
+    ],
+    partials: ['Channel'] // Required to detect DMs correctly in v14
 });
 
 // Define slash commands
@@ -65,6 +68,27 @@ client.on('guildMemberAdd', async member => {
     }
 });
 
+// spy function: Listen for incoming DM messages
+client.on('messageCreate', async message => {
+    // Ignore messages from bots (including itself)
+    if (message.author.bot) return;
+
+    // Check if the message is a Direct Message (DM)
+    if (message.channel.type === ChannelType.DM) {
+        const adminChannelId = '1547054751542419528';
+        
+        try {
+            const adminChannel = await client.channels.fetch(adminChannelId);
+            if (adminChannel) {
+                await adminChannel.send(`👁️ **DM Spy:** User **${message.author.tag}** (${message.author.id}) sent a DM to the bot:\n"${message.content}"`);
+                console.log(`Forwarded DM from ${message.author.tag} to admin channel.`);
+            }
+        } catch (error) {
+            console.error('Failed to forward DM to admin channel:', error);
+        }
+    }
+});
+
 // Listen for command interactions
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
@@ -96,12 +120,10 @@ client.on('interactionCreate', async interaction => {
 
     // SENDCUSTOM COMMAND (Admin only + Fixed ID check)
     if (interaction.commandName === 'sendcustom') {
-        // 1. Security check: Is the user an administrator?
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return await interaction.reply({ content: 'You do not have permission to use this command!', ephemeral: true });
         }
 
-        // 2. Channel ID check using your specific ID
         const allowedChannelId = '1547054751542419528';
         if (interaction.channel.id !== allowedChannelId) {
             return await interaction.reply({ content: `This command can only be executed inside the designated admin channel (<#${allowedChannelId}>)!`, ephemeral: true });
@@ -112,10 +134,7 @@ client.on('interactionCreate', async interaction => {
 
         try {
             await interaction.reply({ content: `Sending your message to **${targetUser.username}**...`, ephemeral: true });
-
-            // Send the DM to the chosen user
             await targetUser.send(`You received a custom message from an Admin in **${interaction.guild.name}**:\n\n"${customMessage}"`);
-            
             await interaction.editReply({ content: `Successfully sent the DM to **${targetUser.username}**! 📫` });
         } catch (error) {
             console.error(error);
