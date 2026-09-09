@@ -1,22 +1,24 @@
-const { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, WebhookClient } = require('discord.js');
 const http = require('http');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// 1. Define the slash command
+// 1. Define slash commands
 const commands = [
     {
         name: 'ping',
         description: 'Replies with Pong!',
     },
+    {
+        name: 'sendwebhook',
+        description: 'Sends a test message via webhook',
+    }
 ];
 
-// 2. Register the command with Discord on startup
+// Register commands with Discord on startup
 client.once('ready', async () => {
     console.log(`Bot is online as ${client.user.tag}!`);
-
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-
     try {
         console.log('Started refreshing application (/) commands.');
         await rest.put(
@@ -29,12 +31,34 @@ client.once('ready', async () => {
     }
 });
 
-// 3. Listen for the command interaction in Discord
+// 2. Listen for command interactions
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     if (interaction.commandName === 'ping') {
         await interaction.reply('Pong! 🏓');
+    }
+
+    if (interaction.commandName === 'sendwebhook') {
+        // We read the webhook URL safely from Render's Environment Variables
+        const webhookUrl = process.env.WEBHOOK_URL;
+
+        if (!webhookUrl) {
+            return await interaction.reply({ content: 'Error: WEBHOOK_URL is not configured on Render!', ephemeral: true });
+        }
+
+        try {
+            const webhookClient = new WebhookClient({ url: webhookUrl });
+            await webhookClient.send({
+                content: 'Hello! This message is sent via a Discord Webhook! 🚀',
+                username: 'FZY Webhook',
+                avatarURL: client.user.displayAvatarURL(),
+            });
+            await interaction.reply({ content: 'Webhook message sent successfully!', ephemeral: true });
+        } catch (error) {
+            console.error(error);
+            await interaction.reply({ content: 'Failed to send webhook message.', ephemeral: true });
+        }
     }
 });
 
