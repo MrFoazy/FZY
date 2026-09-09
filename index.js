@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, REST, Routes, WebhookClient, PermissionFlagsBits, ChannelType, Partials } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, WebhookClient, PermissionFlagsBits, ChannelType, Partials, ActivityType } = require('discord.js');
 const http = require('http');
 
 const client = new Client({ 
@@ -45,9 +45,20 @@ const commands = [
     }
 ];
 
-// Register commands on startup
+// Register commands and set status on startup
 client.once('ready', async () => {
     console.log(`Bot is online as ${client.user.tag}!`);
+
+    // 1. Set Status to Do Not Disturb and Custom Activity Text
+    client.user.setPresence({
+        activities: [{ 
+            name: 'customstatus', 
+            type: ActivityType.Custom, 
+            state: 'Official Bot of MrFoazy' 
+        }],
+        status: 'dnd', // 'dnd' stands for Do Not Disturb (Red circle)
+    });
+
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     try {
         console.log('Started refreshing application (/) commands.');
@@ -83,12 +94,10 @@ client.on('messageCreate', async message => {
             if (adminChannel) {
                 let logMessage = `👁️ **DM Spy:** User **${message.author.tag}** (${message.author.id}) sent a message:\n`;
                 
-                // Add text content if present
                 if (message.content) {
                     logMessage += `> "${message.content}"\n`;
                 }
 
-                // Check for links/attachments (images, files)
                 if (message.attachments.size > 0) {
                     logMessage += `📁 **Attachments:**\n`;
                     message.attachments.forEach(attachment => {
@@ -96,7 +105,6 @@ client.on('messageCreate', async message => {
                     });
                 }
 
-                // Check if any other users were mentioned/tagged in the text
                 if (message.mentions.users.size > 0) {
                     logMessage += `👤 **Mentioned Users:** `;
                     const mentions = message.mentions.users.map(u => `**${u.tag}**`).join(', ');
