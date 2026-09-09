@@ -1,7 +1,6 @@
 const { Client, GatewayIntentBits, REST, Routes, WebhookClient, PermissionFlagsBits, ChannelType, Partials } = require('discord.js');
 const http = require('http');
 
-// Corrected intents and partials to fully unlock DM reading capabilities
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds, 
@@ -72,20 +71,40 @@ client.on('guildMemberAdd', async member => {
     }
 });
 
-// Spy function: Listen for incoming DM messages and forward them
+// Spy function: Listen for incoming DM messages and forward text, links, and images
 client.on('messageCreate', async message => {
-    // Ignore messages from bots
     if (message.author.bot) return;
 
-    // Check if message is inside a DM channel
     if (message.channel.type === ChannelType.DM) {
         const adminChannelId = '1547054751542419528';
         
         try {
             const adminChannel = await client.channels.fetch(adminChannelId);
             if (adminChannel) {
-                await adminChannel.send(`👁️ **DM Spy:** User **${message.author.tag}** (${message.author.id}) sent a DM to the bot:\n"${message.content}"`);
-                console.log(`Forwarded DM from ${message.author.tag} to admin channel.`);
+                let logMessage = `👁️ **DM Spy:** User **${message.author.tag}** (${message.author.id}) sent a message:\n`;
+                
+                // Add text content if present
+                if (message.content) {
+                    logMessage += `> "${message.content}"\n`;
+                }
+
+                // Check for links/attachments (images, files)
+                if (message.attachments.size > 0) {
+                    logMessage += `📁 **Attachments:**\n`;
+                    message.attachments.forEach(attachment => {
+                        logMessage += `${attachment.url}\n`;
+                    });
+                }
+
+                // Check if any other users were mentioned/tagged in the text
+                if (message.mentions.users.size > 0) {
+                    logMessage += `👤 **Mentioned Users:** `;
+                    const mentions = message.mentions.users.map(u => `**${u.tag}**`).join(', ');
+                    logMessage += `${mentions}\n`;
+                }
+
+                await adminChannel.send({ content: logMessage });
+                console.log(`Forwarded comprehensive DM from ${message.author.tag} to admin channel.`);
             }
         } catch (error) {
             console.error('Failed to forward DM to admin channel:', error);
